@@ -1,0 +1,10 @@
+#.env
+.env
+
+# Database config
+config/
+
+# nodeJS modules
+node_modules/
+
+.package-lock.json
