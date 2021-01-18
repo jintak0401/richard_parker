@@ -37,6 +37,20 @@ const generateCheckNum = (min, max) => {
   return Math.floor(Math.random() * (max - min)) + min;
 };
 
+// 인증번호를 재전송
+const resendCheckNum = (email) => {
+  const newCheckNum = generateCheckNum(10_000, 100_000);
+  loginRequests[email] = [
+    newCheckNum, // 인증번호
+    moment(), // 3분을 확인하기 위한 시간값
+    0, // trial
+    loginRequests[email][3], // id
+    loginRequests[email][4], // nickname
+  ];
+  // 인증번호 이메일로 발송
+  emailSender.sendLoginMail(email, newCheckNum);
+};
+
 // access_token 확인
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -46,7 +60,7 @@ const authenticateToken = (req, res, next) => {
   // access_token이 만료되었는지 & 변조되었는지 검사
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET),
     (err, user) => {
-      if (err) return res.sendStatus(403);
+      if (err) return res.json({ msg: "expired" });
       req.body.user = user;
       next();
     };
@@ -55,6 +69,7 @@ const authenticateToken = (req, res, next) => {
 // 동일한 메일로 회원가입이 되어있는지 검사
 const checkSameEmail = async (req, res, next) => {
   const email = req.body.email;
+  console.log(req.body);
   try {
     const existSameEmail = await User.findOne({
       where: {
@@ -92,6 +107,8 @@ const checkSameNick = async (req, res, next) => {
 
 // 없는 계정인지 검사 => 없다면 {msg: "no account"} 전송, 있다면 next()
 const checkNoAccount = async (req, res, next) => {
+  console.log(req.body);
+
   // DB I/O를 줄이기 위해 loginRequests에 없을 때만 DB find를 진행
   if (!loginRequests[req.body.email]) {
     try {
@@ -104,7 +121,7 @@ const checkNoAccount = async (req, res, next) => {
         req.body.id = account.dataValues.id;
         req.body.nick = account.dataValues.nick;
         return next();
-      } else return res.json("no account"); // 계정이 없을 경우 계정이 없다는 메시지 전송
+      } else return res.json({ msg: "no account" }); // 계정이 없을 경우 계정이 없다는 메시지 전송
     } catch (err) {
       console.error(err);
       next(err);
@@ -152,20 +169,13 @@ router.post(
 router.post("/login", checkNoAccount, async (req, res, next) => {
   const { email, checkNum, msg } = req.body;
 
+  console.log(req.body);
+
   // 로그인 요청을 했었던 경우
   if (loginRequests[email]) {
     // 최초 로그인 재요청 => loginRequests 갱신 & 이메일 재전송
     if (msg === "resend") {
-      const newCheckNum = generateCheckNum(10_000, 100_000);
-      loginRequests[email] = [
-        newCheckNum, // 인증번호
-        moment(), // 3분을 확인하기 위한 시간값
-        0, // trial
-        loginRequests[email][3], // id
-        loginRequests[email][4], // nickname
-      ];
-      // 인증번호 이메일로 발송
-      emailSender.sendLoginMail(email, newCheckNum);
+      resendCheckNum(email);
       return res.json({ msg: "send mail" });
     }
     // 생성해준 checkNum 과 보내온 checkNum 이 일치하는 경우 => 로그인
@@ -192,8 +202,14 @@ router.post("/login", checkNoAccount, async (req, res, next) => {
     }
     // 생성해준 checkNum 과보내온 checkNum 이 다른 경우 => 에러 메시지
     else {
+      // 모종의 이유로 인증번호 전송 후, 아무런 입력값 없이 다시 로그인 요청한 경우
+      if (!checkNum) {
+        resendCheckNum(email);
+        return res.json({ msg: "send mail" });
+      }
+
       // 5번 동안 틀릴 경우 => 재로그인 요구
-      if (++loginRequests[email][2] === trialLimit) {
+      else if (++loginRequests[email][2] === trialLimit) {
         delete loginRequests[email];
         return res.json({ msg: "retry" });
       }
@@ -211,6 +227,7 @@ router.post("/login", checkNoAccount, async (req, res, next) => {
     // 최초의 로그인 요청
     // loginRequests에 원소 추가, checkNum 은 5자리 숫자(10,000 ~ 99,999)
     const newCheckNum = generateCheckNum(10_000, 100_000);
+
     loginRequests[email] = [
       newCheckNum, // 인증번호
       moment(), // 3분 확인용 시간값
@@ -221,7 +238,7 @@ router.post("/login", checkNoAccount, async (req, res, next) => {
     try {
       // 인증번호 이메일로 발송
       await emailSender.sendLoginMail(email, newCheckNum);
-      return res.json({ msg: "send mail", checkNum: newCheckNum });
+      return res.json({ msg: "send mail" });
     } catch (err) {
       console.error(err);
       next(err);
@@ -296,6 +313,7 @@ router.post("/token", (req, res, next) => {
           return res.json({
             accessToken: newAccessToken,
             refreshToken: newRefreshToken,
+            msg: "done",
           });
         } catch (err) {
           console.error(err);

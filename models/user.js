@@ -29,8 +29,8 @@ module.exports = class User extends (
         modelName: "User",
         tableName: "users",
         paranoid: true, // deletedAt 이 자동으로 추가됨
-        charset: "utf8",
-        collate: "utf8_general_ci",
+        charset: "utf8mb4",
+        collate: "utf8mb4_general_ci",
       }
     );
   }

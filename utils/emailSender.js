@@ -22,8 +22,8 @@ const sendLoginMail = async (email, checkNum) => {
   const emoji = [randomPickEmoji(), randomPickEmoji()];
 
   // send mail with defined transport object
-  const tmp = await transporter.sendMail({
-    from: `"ADMIN" <${adminAccount}>`, // sender address
+  await transporter.sendMail({
+    from: `"리차드 파커" <${adminAccount}>`, // sender address
     to: email, // list of receivers
     subject: `${emoji[0]} 안녕하세요! ${emoji[1]}`, // Subject line
     // text: `인증번호 ${checkNum}`, // plain text body

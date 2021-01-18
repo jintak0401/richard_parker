@@ -16,7 +16,8 @@ const sendNextCat = async (res) => {
 
 router.get("/", async (req, res, next) => {
   try {
-    sendNextCat(res);
+    // sendNextCat(res);
+    res.send("서버로부터의 메시지");
   } catch (err) {
     console.error(err);
     next(err);
